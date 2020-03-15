@@ -1,5 +1,12 @@
-import React, {useMemo, useState} from "react";
-import {GloomHelperData, GloomHelperMonsterData, ScenarioData} from "./config/GloomhavenHelper/data";
+import React, {ChangeEvent, useMemo, useState} from "react";
+import {
+    AttributeValues,
+    BossMonster,
+    GloomHelperData,
+    GloomHelperMonsterData,
+    Monster,
+    ScenarioData,
+} from "./config/GloomhavenHelper/data";
 import {GloomyData} from "./config/GloomyData";
 import {ModifierCard} from "./config/GloomyCompanion/modifiers";
 import JSONTreeComponent from "react-json-tree";
@@ -33,6 +40,102 @@ function MonsterPicker(props: {
 type MonsterType = keyof GloomHelperData["monsters"];
 type MonsterData = { id: MonsterType } & GloomHelperMonsterData;
 
+class PlacedMonster {
+
+    public damage = 0;
+
+    get currentHealth() {
+        return this.health - this.damage;
+    }
+
+    set currentHealth(next) {
+        this.damage = this.health - next;
+    }
+
+    constructor(
+        readonly definition: Omit<MonsterData,"levels">,
+        readonly health: number,
+    ) {}
+
+    copy() {
+        // @ts-ignore
+        return Object.assign(new this.constructor(), this) as this;
+    }
+}
+
+class Player {
+    copy() {
+        // @ts-ignore
+        return Object.assign(new this.constructor(), this) as this;
+    }
+}
+
+function findLevelData(levels: Array<{ level: number } & Monster>, wantedLevel: number) {
+    for(let level of levels) {
+        if (level.level === wantedLevel) {
+            return level;
+        }
+    }
+    return undefined;
+}
+
+function placeMonsterForContext(context: GameContext) {
+
+    function mapMonsterValues(definition: number|string) {
+        if (typeof definition === "number") {
+            return definition;
+        }
+
+        let formula = definition
+            .replace("C", context.players.length.toString())
+            .replace("L", context.level.toString())
+            .replace("x", "*")
+        ;
+        const mappedValue = eval(formula);
+
+        if (typeof mappedValue !== "number") {
+            console.log( "expected number, got", mappedValue);
+            throw new Error(`couldn't convert health string ${definition}`)
+        }
+
+        return mappedValue;
+    }
+
+    function placeStandardMonster(monsterValues: AttributeValues, definition: MonsterData): PlacedMonster {
+        return new PlacedMonster(
+            definition,
+            mapMonsterValues(monsterValues.health)
+        )
+    }
+
+    function placeBossMonster(monsterValues: BossMonster, definition: MonsterData): PlacedMonster {
+        return new PlacedMonster(
+            definition,
+            mapMonsterValues(monsterValues.health)
+        );
+    }
+
+    return function placeMonster(definition: MonsterData, context: GameContext): PlacedMonster {
+        const levelData = findLevelData(definition.levels, context.level);
+
+        if (levelData === undefined) {
+            throw new Error("monster not defined for wanted level " + context.level);
+        }
+
+        if ("normal" in levelData) {
+            return placeStandardMonster(levelData.normal, definition);
+        }
+
+        return placeBossMonster(levelData, definition);
+    }
+}
+
+interface GameContext {
+    players: Player[];
+    level: number;
+
+}
+
 export function Game({data}: { data: GloomyData }) {
 
     const monsters = useMemo<Map<MonsterType, MonsterData>>(
@@ -42,11 +145,47 @@ export function Game({data}: { data: GloomyData }) {
         [data.monsters]
     );
 
+    const [context, setContext] = useState<GameContext>({
+        level: 1,
+        players: []
+    });
+
+    const addPlayer = () => {
+        setContext(context => ({
+            ...context,
+           players: [...context.players, new Player()],
+        }))
+    };
+
+    const boundPlaceMonster = placeMonsterForContext(context);
+
     const [scenario, setScenario] = useState<undefined | ScenarioData>();
-    const [revealedMonsters, setMonsters] = useState<MonsterData[]>([]);
-    let onAddMonster = (monster: MonsterType) => setMonsters(activeMonsters => [...activeMonsters, monsters.get(monster) as MonsterData]);
+    const [revealedMonsters, setRevealedMonsters] = useState<PlacedMonster[]>([]);
+    let onAddMonster = (monster: MonsterType) => setRevealedMonsters(
+        activeMonsters => {
+            try {
+                return [
+                    ...activeMonsters,
+                    boundPlaceMonster(monsters.get(monster) as MonsterData, context),
+                ]
+            } catch (e) {
+                console.error(
+                    `failed to place monster ${monster}`,
+                    e
+                );
+                return activeMonsters;
+            }
+        }
+    );
+
+    function updateMonster(id: number, next: PlacedMonster) {
+        const nextRevealed = [...revealedMonsters];
+        nextRevealed[id] = next;
+        setRevealedMonsters(nextRevealed);
+    }
 
     return <div>
+        <button onClick={addPlayer}>Add Player</button>
         <select onChange={(e) => setScenario(data.scenarios[e.target.value])}>
             {Object.keys(data.scenarios).map(key => <option value={key} key={key}>{key}</option>)}
         </select>
@@ -57,15 +196,33 @@ export function Game({data}: { data: GloomyData }) {
             addMonster={onAddMonster}
         />}
         <div>
-            {Array.from(revealedMonsters.values()).map(
-                (monster,i) => <MonsterDisplay key={i} monster={monster}/>
+            {revealedMonsters.map(
+                (monster,i) => <MonsterDisplay key={i} monster={monster} updateMonster={next => updateMonster(i, next)}/>
             )}
         </div>
     </div>;
 }
 
-function MonsterDisplay(props: {monster: MonsterData}) {
-    return <div>{props.monster.id}</div>
+function MonsterDisplay(props: {monster: PlacedMonster, updateMonster: (next: PlacedMonster) => any}) {
+
+    const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const nextValue = event.target.value;
+        if (nextValue === "") return;
+
+        const nextMonster = props.monster.copy();
+        nextMonster.currentHealth = Number.parseInt(nextValue);
+        props.updateMonster(nextMonster);
+    };
+
+    return <div>
+        {props.monster.definition.id}
+        {' '}
+        <input
+            type="number" value={props.monster.currentHealth} min={0} max={props.monster.health}
+            onChange={handleChange}
+        />
+        /{props.monster.health}
+    </div>
 }
 
 function ModifierDrawer({data}: { data: GloomyData }) {
