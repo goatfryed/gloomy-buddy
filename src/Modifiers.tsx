@@ -1,6 +1,7 @@
 import {GloomyData} from "./config/GloomyData";
 import React, {useState} from "react";
 import {ModifierCard} from "./config/GloomyCompanion/modifiers";
+import {selectRandom} from "./util";
 
 export function ModifierDrawer({data}: { data: GloomyData }) {
     const monsterModifierDeck = data.modifierDeckPrototype;
@@ -8,9 +9,7 @@ export function ModifierDrawer({data}: { data: GloomyData }) {
 
     const drawables = monsterModifierDeck.filter(card => !drawnModifiers.includes(card));
     const drawModifier = drawables.length && (() => {
-        let rng = Math.random();
-        let rngInteger = Math.floor(rng * drawables.length);
-        const drawn = drawables[rngInteger];
+        const drawn = selectRandom(drawables);
         setDrawnModifiers([drawn, ...drawnModifiers])
     });
 

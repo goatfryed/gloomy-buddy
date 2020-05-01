@@ -28,15 +28,16 @@ export interface ScenarioData {
     edition?: Edition,
 }
 
+export type MonsterCard = [
+    number,
+    boolean,
+    number,
+    ...string[]
+];
 export type MonsterAbility = {
     name: string,
     edition?: Edition,
-    cards: Array<[
-        number,
-        boolean,
-        number,
-        ...string[]
-    ]>
+    cards: Array<MonsterCard>
 };
 
 export type GloomHelperMonsterData = {

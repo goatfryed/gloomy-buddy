@@ -1,5 +1,7 @@
 
 // data from https://github.com/johreh/gloomycompanion/blob/master/cards.js
+import {MonsterType} from "../../Model";
+
 export const DECKS =
     {   "Ancient Artillery":  {name: "Ancient Artillery", class: "Ancient Artillery"}
         ,   "Bandit Archer":      {name: "Bandit Archer", class: "Archer"}
@@ -38,7 +40,12 @@ export const DECKS =
         ,   "Wind Demon":         {name: "Wind Demon", class: "Wind Demon"}
     };
 
-export const DECK_DEFINITONS =
+export interface GloomyCompanionMonsterDeck {
+        class: MonsterType,
+        cards: Array<(string|number|boolean)[]>,
+}
+
+export const DECK_DEFINITONS: GloomyCompanionMonsterDeck[] =
     [
         { class: "Ancient Artillery"
             , cards:

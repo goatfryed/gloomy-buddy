@@ -21,4 +21,12 @@ export const GloomyData = {
     ].map(c => ({...c})),
 } as const;
 
+export interface MonsterCard {
+    priority: number,
+    id: string,
+    effects: string[],
+
+
+}
+
 export type GloomyData = typeof GloomyData;
